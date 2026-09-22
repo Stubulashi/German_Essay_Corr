@@ -1,0 +1,2 @@
+# German_Essay_Corr
+一个可以用于”使用部署于本地的LLMs”或者在线API的，基于HTML前端的全自动德语作文批改器
