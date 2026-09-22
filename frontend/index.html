@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>德语作文智能批改系统</title>
+    <!-- Material 风格字体(异步加载:离线/内网环境下不阻塞首屏渲染,加载失败自动回退系统字体) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap"
+      rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // 首屏保底看门狗(不依赖前端构建产物):若应用脚本未能在 3.5 秒内完成首帧,
+      // 显示可读的错误提示,避免用户面对无助的纯白屏;正常渲染时无任何副作用。
+      window.setTimeout(function () {
+        var root = document.getElementById('root')
+        if (root && root.childElementCount === 0) {
+          root.innerHTML =
+            '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;' +
+            'font-family:-apple-system,Segoe UI,Noto Sans SC,sans-serif;color:#1A1D2B;background:#F4F6FB;">' +
+            '<div style="max-width:520px;padding:28px;background:#fff;border:1px solid rgba(63,81,181,.16);' +
+            'border-radius:16px;line-height:1.8;">' +
+            '<b>页面未能正常渲染。</b><br/>请刷新页面重试;若反复出现,请双击「一键自检」检查运行环境,' +
+            '或查看浏览器控制台的错误信息。</div></div>'
+        }
+      }, 3500)
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

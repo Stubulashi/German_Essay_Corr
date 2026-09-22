@@ -1,0 +1,171 @@
+# 角色与项目背景
+你是资深的 AI 全栈开发专家,正在协助开发"德语教师端智能作文批改系统"(German Essay Corrector for High School Teachers)。
+目标:编写整洁、模块化的代码,设计数据库结构,构建 UI 组件,处理异步 API 队列,并覆盖整个开发生命周期中的调试工作。
+所有代码注释、Prompt 模板、UI 文案均使用中文。
+
+---
+
+## 1. 产品背景与目标用户
+* **产品类型:** 教师端 SaaS / 桌面生产力工具(B 端 / 以教师为中心)。
+* **目标学生:** 学习德语的中国高中生(水平:A1 至最高 B2),备考**高考德语**或 **DSD I / DSD II** 考试。
+* **核心痛点:** 手写德语作文人工批改耗时。教师需要自动化批量处理、可自定义标准、细粒度报告与灵活的模型选项。
+
+---
+
+## 2. 双管线系统架构(热切换)
+
+后端必须实现 **Strategy Pattern(策略模式)**,支持两条独立管线。教师/开发者可通过 UI 控件或 `.env` 配置切换管线,而不破坏前端渲染与数据库 Schema。
+
+```
+              [ 前端 / UI 批量上传(图片) ]
+                               │
+             [ 管线路由器 / 策略工厂 ]
+                               │
+     ┌─────────────────────────┴─────────────────────────┐
+     ▼                                                   ▼
+┌────────────────────────────────┐         ┌────────────────────────────────┐
+│ 管线 A:统一本地 VLM            │         │ 管线 B:解耦云端                │
+│ (零成本 / 高隐私)              │         │ (高精度 / 深度推理)            │
+├────────────────────────────────┤         ├────────────────────────────────┤
+│ 模型: Qwen3.8-27B-Q4_K_M       │         │ 步骤1: 视觉 / OCR API          │
+│ 引擎: 本地 OpenAI 兼容端点     │         │   (Qwen2.5-VL / Azure OCR)     │
+│ 流程: 单次执行(图入 ->        │         │ 步骤2: [可选 UI 人工复核]      │
+│   OCR + 评分 + 报告出)        │         │ 步骤3: 文本 LLM API            │
+│                                │         │   (DeepSeek-V3 / DeepSeek-R1)  │
+└────────────────────────────────┘         └────────────────────────────────┘
+     │                                                   │
+     └─────────────────────────┬─────────────────────────┘
+                               ▼
+          [ 标准化 Pydantic 输出: EssayCorrectionResult ]
+                               │
+                    [ 存储与 UI 渲染(Markdown) ]
+```
+
+### 管线详情
+* **管线 A(统一本地 VLM 策略):**
+  * **主模型:** 学校自托管 `Qwen3.8-27B-Q4_K_M`,通过 OpenAI 兼容端点(vLLM / Ollama)接入。
+  * **机制:** 单次 Prompt 执行。直接接收手写图片,提取学生姓名/学号,转录手写德语文本,按指定评分标准评估,并一次性产出 Markdown 报告。
+  * **适用:** 零 API 成本、严格数据隐私、本地离线网络环境。
+* **管线 B(解耦混合策略):**
+  * **视觉/OCR 层:** `Qwen2.5-VL API` 或 `Azure Computer Vision API`,提取学生信息并转录手写文本。
+  * **评分/LLM 层:** `DeepSeek-V3` 或 `DeepSeek-R1 API`,进行结构化语法评估与报告生成。
+  * **机制:** 两段式管线。支持可选的教师人工核验/修正 OCR 转录结果,再发送给 LLM。
+  * **适用:** 极度潦草的手写、高度复杂的教学分析、商业部署。
+
+---
+
+## 3. 动态控制矩阵与标准化数据 Schema
+
+### A. 教师配置输入
+1. **`pipeline_choice`:** `PIPELINE_A_LOCAL` | `PIPELINE_B_CLOUD`
+2. **`grading_standard`:**
+   * `GAOKAO`: 严格语法检查(语序、变格词尾、动词框型结构/Satzklammer)。基于中国高考 25 分制评分标准扣分。
+   * `DSD`: 依据 CEFR(A2/B1/B2)能力评估。关注段落结构(引入、论证、结论)、逻辑衔接与关联词(*zwar...aber, einerseits...andererseits*)。
+3. **`detail_level`:**
+   * `LOW`(仅标注错误): 原文中错误位置加粗/高亮。
+   * `MEDIUM`(标错+修改): 高亮错误并提供修正后的德语表达。
+   * `HIGH`(保姆级解析): 高亮错误、提供修正表达,并附详细中文语法解释(如*"mit 需接 Dativ,故 dein 应改为 deinem"*)。
+
+### B. 标准化后端输出接口(Pydantic 模型)
+无论使用哪条管线,处理结果必须符合此统一 Schema:
+
+```python
+class ErrorItem(BaseModel):
+    original_text: str
+    corrected_text: str
+    error_type: str  # 如 "Word Order", "Case Ending", "Vocabulary"
+    explanation: Optional[str] = None  # 当 detail_level == HIGH 时包含
+
+class EssayCorrectionResult(BaseModel):
+    student_name: str
+    student_id: Optional[str] = None
+    transcribed_text: str
+    overall_score: str  # 如 "18 / 25" 或 "B1 Pass"
+    overall_comment: str
+    errors: List[ErrorItem]
+    highlights: List[str]
+    markdown_report: str  # 预渲染的 Markdown,供前端展示
+```
+
+---
+
+## 4. Markdown 输出标准规范
+
+两条管线的 `markdown_report` 必须符合以下结构:
+
+```markdown
+# 德语作文批改报告 - [学生姓名 / 学号]
+**运行管线:** [本地 Qwen3.8-27B / 云端 DeepSeek] | **考试标准:** [高考 / DSD] | **细致度:** [高 / 中 / 低]
+**综合得分:** [X] / [25 或 CEFR 等级]
+
+---
+### 📝 总体评价
+[总体评论:优点、主要语法陷阱与结构]
+
+### 🔍 详细批改
+> 原句:[原句,错误以 ❌ 标注]
+> **修改:** [修正文本,正确以 ✅ 标注]
+> **错因解析:** [中文语法规则解释]
+
+### 📊 词汇与句型亮点/短板
+* **亮点:** [使用得当的词汇 / 关联词]
+* **薄弱点:** [反复出现的语法薄弱模式]
+```
+
+---
+
+## 5. 系统功能与路线图
+
+1. **批量异步队列:** FastAPI + asyncio 工作池,处理批量上传(ZIP / 多图片)而不阻塞 UI。【已实现,另含孤儿任务自愈】
+2. **班级共性错因分析:** 聚合已有批改数据计算错误频率,生成讲评摘要(高频错因 Top N + 典型错例 + 建议顺序 + 得分分布)。【已实现:错因经 19 类考点标准化后统计,`/api/analytics/class-diagnosis` + 前端班级分析页】
+3. **Human-in-the-Loop 复核 UI:** 分屏界面(左:手写作文图片;右:可编辑 Markdown 报告)。【已实现,另含教师版/学生版双报告、打印、报告恢复】
+4. **学生错题本:** 按学生追踪历史错误(复现错因高亮、时间线、个体分布)。【已实现:`/api/students/profile` + 前端学生错题本页】
+
+【路线图进展(2026-09-18 更新;逐项核对与修复记录见 docs/一致性审阅与修复报告.md,全量补齐交付说明见 docs/Spec完成度对照与交付说明.md)】
+- 已完成:批注模式全文视图、错误↔行号联动定位、数据保留与备份、HEIC 直传与上传前客户端压缩、班级合并、上传指派(花名册/文件名/顺序)与分片提交、统一设置中心(注册表驱动/热更新/连通性测试/提示词微调)、设置中心增强(运行模式三卡/探索项恢复默认与一键回退/开发者项后端门控)、数据加密(AES-256-GCM 透明加解密/恢复密钥/Plan B 归档重建/审计)、作业台账(全栈)、考试统计(全栈)、统一统计层(三源聚合/总表/分布/排行/趋势)、示范学习(全栈含测试)、重新批改(原地重跑/追溯/错因清理重建)、转录原文编辑与批注核对增强(19 类颜色+9 线型/图例筛选/清单↔全文联动/导出)、上传前图片编辑(灰度/黑白/裁剪/旋转/姓名栏选区/撤销重置)、设置中心窗口化(左范围×右小项/教学与报告分组/及格线口径与工作台默认值可配/学生版显示项);
+- 部分完成:教师校准与反馈闭环(报告编辑 + 示范学习均已交付)、订正追踪(学生版订正单)、桌面化打包(离线自包含运行已达成零安装开箱可用,桌面壳未做)、可观测性增强、多用户认证(已落地“回环限制 + 可选令牌”方案,完整认证体系未做);
+- 待启动:自定义评分细则(Rubric)、SSE 实时进度、双管线交叉校验。
+
+---
+
+## 6. 开发实现准则
+
+1. **严格策略模式:** 实现基类 `AbstractCorrectionPipeline`,子类 `LocalVLMPipeline` 与 `DecoupledCloudPipeline`。使用工厂方法 `get_pipeline(config)` 实例化。
+2. **配置解耦:** 环境变量保存在 `.env`(如 `LOCAL_VLM_BASE_URL`、`DEEPSEEK_API_KEY`、`OCR_API_KEY`)。
+3. **优雅管线降级:** 若 `PIPELINE_A_LOCAL` 抛出网络错误/超时,允许可选的自动故障转移至 `PIPELINE_B_CLOUD`,并记录警告日志。
+4. **健壮解析:** 所有 LLM 输出必须通过 `EssayCorrectionResult` 校验。防御性处理 Markdown 代码块剥离与 JSON 格式化错误。
+5. **代码质量:** 使用类型注解、标准 docstring、模块化目录结构(`/pipelines`, `/models`, `/services`, `/api`),异步 I/O。
+
+---
+
+## 项目技术栈约定
+
+* 后端:Python + FastAPI + Pydantic v2 + pydantic-settings + httpx + SQLAlchemy 2(async)+ aiosqlite + SQLite + **Alembic 迁移** + Pillow(图片预处理)
+* 前端:React 18 + Vite + TypeScript + **MUI(Material UI v6,Material Design)+ MUI X Charts** + react-markdown + react-zoom-pan-pinch + axios
+* 异步队列:进程内 asyncio 工作池(Windows 下 Celery 兼容性差,保留扩展点);启动时孤儿任务自愈
+* markdown_report 由后端 `report_renderer.py` 确定性渲染(LLM 只产出结构化 JSON);学生版订正单同样由后端渲染,保证双管线输出完全一致
+* **错因分类标准化**:LLM 自由输出的 error_type 必须经 `error_taxonomy` 归一到固定考点分类(canonical_type)后才落库/统计
+* **数据库变更必须走 Alembic 迁移**(自动生成 + 启动时自动应用,存量库自动 stamp 基线)
+* 端口:后端 8765(离线/生产模式下由后端直接托管前端构建产物,访问根路径即完整应用),前端开发模式 5173(Vite proxy `/api` -> 8765)
+* **离线自包含交付**:runtime/python(便携运行时,含全部后端依赖)+ frontend/dist(前端构建产物);新电脑零安装开箱可用,入口脚本:一键启动 / 一键停止 / 首次安装 / 一键自检
+- 练习卷生成 + 存档图片压缩(2026-09-18 第七轮,spec 清零):practice_sheets(b924fa2a598d)/routes_practice/PRACTICE_SYSTEM_PROMPT;image_compress(+Service)/routes_maintenance/IMAGE_COMPRESS_*;275 tests、冒烟 20/20。
+- OCR 忠实性+PDF(2026-09-18 第八轮):OCR 契约 v2(recognition_quality/quality_note)、零修正红线、[unsicher:…] 标记、TranscriptPanel 标记渲染、pdf_expand(pypdfium2)、PDF 上传/ZIP 内支持;288 tests、冒烟 10/10。
+- 批改意见排版+启动选择(2026-09-18 第九轮):结构化错误区块(Callout)、clear-demo-data、STARTUP_DATA_PICKER+StartupDataDialog;291 tests、build 通过。
+- 连续审阅+队列分组(2026-09-18 第十轮):ReviewPage sibling 导航(范围/边界/状态重置/快捷键)、QueuePage 分组渲染(作业→批次→其他);build 通过。
+- 启动解锁流程重构(2026-09-18 第十一轮):UnlockDialog 双模式+AppShell 分阶段门禁(选择数据后才查加密;解锁不可跳过);build 通过。
+- OCR 异常检测自愈(2026-09-18 第十二轮):ocr_anomaly 检测器+双管线重试/降级+4 设置项+审计;303 tests。
+- macOS 适配+应急版(2026-09-19 第十三轮):.command 三件套+制作器(zero业务改动);应急启动 win/mac(进程 env 注入,不污染 .env);303 tests/build OK。
+- 管线A复核对齐(2026-09-20 第十四轮):A 两段式复核(OCR/评分角色提示词+本地端点)、共享 run_ocr_with_guard、服务层确认后守卫、前端去 B 专属;325 tests、build、冒烟 18/18。
+- 视觉误报修复+标准答题卷(2026-09-20 第十五轮):'未收到图片'→配置错误(三守卫+探针);sheet_align 自动找平(仅标准卷生效);342 tests、冒烟 8/8。
+- 视觉发送层jpg归一化(2026-09-20 第十六轮):image_to_data_url 统一 JPEG+体积护栏;diag_vision 五载荷;349 tests。
+- 答题卷精修+找平校正(2026-09-20 第十七轮):模板 grid 重排+双类定位块;sheet_align 精确 mm 几何+整页外推 QUAD(修复裁半块系统偏差);name-crop 端点+审阅页姓名小图;编辑器首帧修复;352 tests、冒烟 11/11。
+- 上传预识别+大预览(2026-09-20 第十八轮):name_pre_ocr(端点优先+RapidOCR离线兜底,JSON列IS NULL坑);前端大预览卡+窄屏zoom;364 tests、冒烟 7/7。
+- 续写纸识别与自动并页(2026-09-20 第十九轮):类型带编码(101=续写)+_group_pages 组级建卡;续写纸模板;373 tests、冒烟 7/7。
+- 手写模型+全局等待态(2026-09-20 第二十轮):本地模板模型(端点/特征库)+handwriting 路由与迁移;status overview 真实自检/进度;前端 Tab+状态条+抄写卡。389 tests、冒烟 12/12。
+- UI档位(2026-09-20 第二十一轮):theme 三档 Token 派生+顶栏/设置双入口+双轨持久化;效率档真削减;389 tests、build OK。
+- 第二十二轮(2026-09-20):台账登记明细崩溃修复(client 契约错位 records→items);UI 三档深化(极简=灰阶去色+低饱和语义色+Chip 去填充;高级=页面淡入+微光+hover 质感+标题细线);班级管理独立(/classes 六标签,与批改工作台并列;/analytics 重定向;AnalyticsPage 内嵌化;CorrectionPage 瘦身;RosterImportDialog 删除;新增 components/classes/*)。build+389 tests+浏览器复验全通过。
+- 第二十三轮(2026-09-20):上传即识+定位点裁切根治。sheet_align 块真实性三级校验+网格簇候选+尺寸先验+画布理论锚定;crop_name_region_ex(meta:basis/points/region),无定位点不裁(整图识别),废除启发式;name_pre_ocr 放行 WAITING_REVIEW+全分支审计。394 tests;端到端冒烟(标准卷→canonical(4/4)→识别 Li Ming;无定位点→full-image)全通过。
+- 第二十四轮(2026-09-20):纯本地 OCR 模式 LOCAL_OCR_ONLY(OcrClient.extract 短路→_extract_local_rapid:RapidOCR 整页转录+依定位点姓名区解析+置信度 quality;预识别同开关跳过端点;组件缺失明确报错不回退;评分/管线A/契约零改动;runtime 装组件+自检行)。402 tests;端到端(端点不可达仍本地识别→评分'23/25')全通过。
+- 第二十五轮(2026-09-21):强制性姓名识别 FORCE_NAME_RECOGNITION(选文件即本地识名/年龄:新只读端点 probe-identity + probe_personal_info/parse_age;前端列表'文件名位置'替换为识别结果;与上传后姓名预识别互补;不落盘不建任务)。425 tests(+14);HTTP 8/8;浏览器 UI 复验通过。
+- 第二十六轮(2026-09-21):强制上传即识顺序保证加固(probe_personal_info 透传 basis[canonical/landmarks/full-image]+debug 日志;IdentityProbeItem.basis 契约;顺序契约测试断言"识别输入==裁剪产物";三路径 HTTP 端到端 7/7)。429 tests 零回归。
+- 第二十七轮(2026-09-21):二维码优先识别+绑定答题卷(qr_identity.py 解码链:直扫→缩图→找平画布 ROI(+Otsu/×2 增强)→宽容差 ROI→分块;cv2 入参必须连续化——非连续切片导致检测失败的坑;V1|学号|姓名 负载;probe/预识别 QR 前置;roster qr.png 端点;AnswerSheetPage QR 16mm 版式+绑定参数;选学生打印对话框;qrcode 依赖+自检)。488 tests;HTTP 7/7;浏览器实机(打印页/对话框/上传即识 60ms)全过。

@@ -1,0 +1,186 @@
+/**
+ * 打印样式(#12 / 方向二)
+ *
+ * 两套方案并存:
+ * 1. 独立打印视图(推荐路径):/print/... 路由页面,天然干净布局,
+ *    由 .print-page / .print-variant / .print-task 等类控制,渲染即最终纸面效果;
+ * 2. 旧版兜底:审阅页直接打印时,仅显示带 id="print-area" 的报告区域。
+ */
+
+/* ================= 屏幕展示(打印视图在屏幕上也是干净的 A4 预览) ================= */
+
+.print-page {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 28px 32px 48px;
+  background: #ffffff;
+  color: #1a1d2b;
+  min-height: 100vh;
+  font-size: 12pt;
+  line-height: 1.6;
+  font-family: "SimSun", "Songti SC", "Times New Roman", Georgia, serif;
+}
+
+/* 工具的屏幕样式(打印时整体隐藏) */
+.print-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: #f4f6fb;
+  border: 1px solid #e0e4f0;
+  border-radius: 12px;
+  font-family: "Roboto", "Noto Sans SC", sans-serif;
+}
+
+.print-header {
+  border-bottom: 2px solid #333;
+  padding-bottom: 8px;
+  margin-bottom: 14px;
+}
+
+.print-header h1 {
+  font-size: 18pt;
+  margin: 0 0 6px;
+  font-weight: 700;
+}
+
+.print-header .print-meta {
+  color: #555555;
+  font-size: 10.5pt;
+  font-family: "Roboto", "Noto Sans SC", sans-serif;
+}
+
+.print-image-block {
+  text-align: center;
+  margin: 14px 0;
+}
+
+.print-image-block .pr-image {
+  max-width: 100%;
+  max-height: 248mm;
+  display: block;
+  margin: 0 auto;
+}
+
+.print-image-caption {
+  font-size: 10pt;
+  color: #666666;
+  margin-top: 6px;
+  font-family: "Roboto", "Noto Sans SC", sans-serif;
+}
+
+.print-variant {
+  margin-top: 8px;
+}
+
+.print-variant > h2 {
+  font-size: 14pt;
+  border-bottom: 1px solid #999999;
+  padding-bottom: 4px;
+  margin: 18px 0 10px;
+}
+
+.print-transcript {
+  white-space: pre-wrap;
+  line-height: 1.9;
+  font-size: 11.5pt;
+}
+
+/* ================= 打印输出 ================= */
+
+@media print {
+  /* 工具条与提示不在纸面上出现 */
+  .no-print {
+    display: none !important;
+  }
+
+  /* 打印视图占满页面,恢复为原生文档流 */
+  .print-page {
+    max-width: none;
+    padding: 0;
+    min-height: auto;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* 原图:每张图后强制分页 */
+  .print-image-block {
+    break-after: page;
+  }
+
+  /* 多版本报告之间分页隔开 */
+  .print-variant + .print-variant {
+    break-before: page;
+  }
+
+  /* 批量打印:每个任务从新页开始 */
+  .print-task + .print-task {
+    break-before: page;
+  }
+
+  /* 分页避让:标题不落单、条目组不跨页 */
+  .print-page h1,
+  .print-page h2,
+  .print-page h3,
+  .print-page h4 {
+    break-after: avoid;
+  }
+  .print-page h4 + blockquote {
+    break-before: avoid;
+  }
+  .print-page blockquote,
+  .print-page li,
+  .print-page table,
+  .print-page .print-image-block img {
+    break-inside: avoid;
+  }
+
+  /* A4 纸面边距 */
+  @page {
+    margin: 16mm 14mm;
+    size: A4;
+  }
+}
+
+/* ================= 旧版兜底:审阅页直接打印(仅报告区) ================= */
+
+@media print {
+  /* 旧路径下隐藏所有内容 */
+  body:has(#print-area) * {
+    visibility: hidden;
+  }
+
+  /* 仅显示报告区域(旧路径) */
+  #print-area,
+  #print-area * {
+    visibility: visible;
+  }
+
+  /* 报告区域顶到页面左上角,展开全部内容(取消滚动裁剪) */
+  #print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-height: none !important;
+    overflow: visible !important;
+    border: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+
+  /* 打印时避免标题与内容被分页截断 */
+  #print-area h1,
+  #print-area h2,
+  #print-area h3,
+  #print-area h4 {
+    break-after: avoid;
+  }
+  #print-area blockquote,
+  #print-area li {
+    break-inside: avoid;
+  }
+}

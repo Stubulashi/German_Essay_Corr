@@ -1,0 +1,41 @@
+# ===== Web 框架 =====
+fastapi>=0.115.0
+uvicorn>=0.32.0
+python-multipart>=0.0.12
+
+# ===== 配置与校验 =====
+pydantic>=2.9.0
+pydantic-settings>=2.6.0
+
+# ===== HTTP 客户端(调用 LLM / OCR API) =====
+httpx>=0.27.0
+
+# ===== 数据库(异步 SQLite)+ 迁移 =====
+sqlalchemy[asyncio]>=2.0.36
+aiosqlite>=0.20.0
+alembic>=1.14.0
+
+# ===== 文件处理 =====
+aiofiles>=24.1.0
+Pillow>=11.0.0
+
+# ===== 图片处理 =====
+# numpy:去阴影/光照均衡的背景估计除法(缺失时自动跳过该步骤)
+numpy>=1.26.0
+# pillow-heif:iPhone HEIC/HEIF 照片解码(可选;缺失时 HEIC 上传给出转存提示)
+pillow-heif>=0.18.0
+# rapidocr_onnxruntime:纯本地离线识图(姓名预识别兜底;CPU 可跑,PP-OCR 字符集含中文/拼音)
+# 可选组件:缺失/安装失败时自动跳过本地引擎,仅使用已配置的识别端点
+rapidocr_onnxruntime>=1.2.0
+# qrcode:标准答题卷学生二维码生成(纯 Python;解码侧用 cv2,随 rapidocr 分发)
+# 可选组件:缺失时含二维码的答题卷打印不可用(识别链的 QR 解码不受影响)
+qrcode>=7.4
+
+# ===== 安全 =====
+# cryptography:数据加密(AES-256-GCM/SIV、scrypt 口令派生;设置中心"数据加密")
+cryptography>=43.0.0
+
+# ===== 测试 =====
+pytest>=8.3.0
+pytest-asyncio>=0.24.0
+pypdfium2>=4.30

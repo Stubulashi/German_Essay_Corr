@@ -1,0 +1,65 @@
+# ===== Python 后端 =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ===== 数据与上传文件(运行时生成) =====
+backend/data/
+backend/.env
+
+# ===== 便携运行时(体积大,不纳入仓库;分发靠文件夹拷贝或“首次安装”生成) =====
+runtime/
+
+# ===== 前端 =====
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+*.local
+
+# ===== 应急版密钥(明文;勿提交) =====
+应急配置.env
+
+# ===== IDE / 系统 =====
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+backend/backups/
+backend/data_beforerestore_*/
+
+# ===== 个人信息保护:答卷图片 / PDF 扫描件(任意 uploads 层级,严禁入库) =====
+**/uploads/**/*.jpg
+**/uploads/**/*.jpeg
+**/uploads/**/*.png
+**/uploads/**/*.webp
+**/uploads/**/*.heic
+**/uploads/**/*.bmp
+**/uploads/**/*.tif
+**/uploads/**/*.tiff
+**/uploads/**/*.pdf
+
+# ===== 备份包 / 班级数据包导出(可能内含答卷图片) =====
+**/corrector_backup_*.zip
+**/class_package_*.zip
+
+# ===== 业务数据库与运行日志(可能含学生姓名/学号) =====
+backend/**/*.db
+backend/**/*.db-shm
+backend/**/*.db-wal
+backend/**/*.log
+backend/**/_startup_log.txt
+
+# ===== 本地配置变体(保留 .env.example 模板) =====
+backend/.env.*
+!backend/.env.example
+
+# ===== 界面验收截图(含演示数据姓名,不入库) =====
+docs/*.png
+
+# ===== 前端构建缓存 =====
+*.tsbuildinfo

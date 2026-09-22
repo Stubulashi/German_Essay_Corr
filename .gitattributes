@@ -1,0 +1,7 @@
+# 换行符规范(跨平台防踩坑)
+# - .command 脚本:必须 LF(否则 macOS 报 bad interpreter ^M)
+# - .bat 批处理:必须 CRLF(Windows 批处理对换行敏感)
+# - 其余文件:交由 git 按文本自动处理
+* text=auto
+*.command text eol=lf
+*.bat text eol=crlf
